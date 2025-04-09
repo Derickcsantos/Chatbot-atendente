@@ -1,142 +1,201 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
-// Criando uma instância do cliente do WhatsApp
+// Inicializa o cliente do WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true
-    }
+    puppeteer: { headless: true }
 });
 
-// Gerar QR Code para login no WhatsApp Web
-client.on('qr', qr => {
-    qrcode.generate(qr, { small: true });
-});
+// Exibe o QR Code no terminal
+client.on('qr', qr => qrcode.generate(qr, { small: true }));
 
-// Quando o cliente estiver pronto para uso
 client.on('ready', () => {
-    console.log('O cliente está pronto!');
+    console.log('✅ Cliente está pronto!');
 });
 
-// Armazenar o estado de cada usuário (para seguir o fluxo)
+// Estado do usuário
 let userState = {};
 
-const sendMessageWithDelay = (message, from) => {
-    setTimeout(() => {
-        client.sendMessage(from, message);
-    }, 2000); // Atraso de 2 segundos
+const sendMessage = (from, message, delay = 1000) => {
+    setTimeout(() => client.sendMessage(from, message), delay);
+};
+
+// Menu inicial
+const showMainMenu = (from) => {
+    userState[from].step = 'menuPrincipal';
+    sendMessage(from,
+        '🌸 Bem-vindo(a) ao *Salão Paula Tranças*!\nComo posso te ajudar?\n\n' +
+        '1️⃣ Agendar horário\n' +
+        '2️⃣ Ver catálogo\n' +
+        '3️⃣ Dúvidas frequentes\n' +
+        '4️⃣ Remarcar ou cancelar\n' +
+        '5️⃣ Nossas redes sociais\n' +
+        '6️⃣ Trabalhe conosco\n' +
+        '7️⃣ Encerrar atendimento'
+    );
 };
 
 client.on('message', async (message) => {
     const from = message.from;
-    const userMessage = message.body.toLowerCase();
-    
-    // Inicializa o estado do usuário se for a primeira vez
+    const text = message.body.trim().toLowerCase();
+
+    // Inicializa estado do usuário se não existir
     if (!userState[from]) {
-        userState[from] = { step: 'start' };
+        userState[from] = {
+            active: false,
+            step: 'aguardandoInicio'
+        };
     }
 
-    // Lógica de fluxo com base no estado do usuário
-    switch (userState[from].step) {
-        case 'start':
-            if (
-                userMessage === 'oi' || userMessage === 'oii' || userMessage === 'oiii' ||
-                userMessage === 'olá' || userMessage === 'boa noite' || userMessage === 'bom dia' ||
-                userMessage === 'boa tarde' || userMessage === 'eai' || userMessage === 'salve'
-            ) {
-                userState[from].step = 'saudacao'; // Altera o estado para o próximo passo
-                sendMessageWithDelay('Olá! Obrigada por entrar em contato, seja bem-vinda ao Salão Paula Tranças. Sobre o que gostaria de falar?\n\nEscolha uma das opções abaixo:\n\n1. Agendar horário\n2. Dúvidas\n3. Remarcar/Cancelar\n4. Redes sociais\n5. Trabalhe conosco', from);
+    const state = userState[from];
+
+    // Caso o usuário deseje iniciar atendimento
+    if (text === 'iniciar atendimento') {
+        state.active = true;
+        showMainMenu(from);
+        return;
+    }
+
+    // Caso o usuário deseje encerrar atendimento
+    if (text === 'encerrar atendimento') {
+        state.active = false;
+        state.step = 'aguardandoInicio';
+        sendMessage(from, '✅ Atendimento encerrado. Envie *Iniciar atendimento* para falar conosco novamente.');
+        return;
+    }
+
+    // Se o usuário não tiver iniciado o atendimento, não responde
+    if (!state.active) return;
+
+    // Fluxo principal
+    switch (state.step) {
+        case 'menuPrincipal':
+            switch (text) {
+                case '1':
+                case 'agendar':
+                case 'agendar horário':
+                    state.step = 'agendar1';
+                    sendMessage(from, '👩🏾‍🦱 Já escolheu seu penteado? (sim/não)');
+                    break;
+
+                case '2':
+                case 'ver catálogo':
+                case 'catálogo':
+                    state.step = 'catalogo';
+                    sendMessage(from, '📒 Veja nosso catálogo aqui:\nhttps://www.whatsapp.com/catalog/5511952801212/?app_absent=0');
+                    break;
+
+                case '3':
+                case 'dúvidas':
+                    state.step = 'duvidas';
+                    sendMessage(from, '❓ Envie sua dúvida! Responderemos o quanto antes.');
+                    break;
+
+                case '4':
+                case 'remarcar':
+                case 'cancelar':
+                case 'remarcar ou cancelar':
+                    state.step = 'remarcarOuCancelar';
+                    sendMessage(from, 'Deseja *remarcar* ou *cancelar* seu horário?');
+                    break;
+
+                case '5':
+                case 'redes sociais':
+                    state.step = 'redes';
+                    sendMessage(from, '📸 Siga nosso Instagram:\nhttps://www.instagram.com/paulatrancasealongamentos');
+                    break;
+
+                case '6':
+                case 'trabalhe conosco':
+                    state.step = 'trabalhe';
+                    sendMessage(from, '💼 Envie fotos do seu trabalho para avaliarmos! Estamos ansiosas para te conhecer!');
+                    break;
+
+                case '7':
+                case 'encerrar':
+                case 'encerrar atendimento':
+                    state.active = false;
+                    state.step = 'aguardandoInicio';
+                    sendMessage(from, '✅ Atendimento encerrado. Envie *Iniciar atendimento* para falar conosco novamente.');
+                    break;
+
+                default:
+                    sendMessage(from, '❌ Opção inválida. Escolha uma opção do menu digitando o número correspondente.');
+                    showMainMenu(from);
             }
             break;
 
-        case 'saudacao':
-            if (userMessage === '1' || userMessage === 'agendar horário') {
-                userState[from].step = 'agendar'; // Passa para o próximo passo de agendamento
-                sendMessageWithDelay('Já decidiu qual o penteado que deseja? (Responda com "sim" ou "não")', from);
-            } else if (userMessage === '2' || userMessage === 'dúvidas') {
-                userState[from].step = 'duvidas'; // Passa para o próximo passo de dúvidas
-                sendMessageWithDelay('Descreva sua dúvida, assim que possível responderemos. Se for sobre agendamento, por favor, forneça os detalhes.', from);
-            } else if (userMessage === '3' || userMessage === 'remarcar' || userMessage === 'cancelar') {
-                userState[from].step = 'remarcarCancelar'; // Passa para o próximo passo de remarcar/cancelar
-                sendMessageWithDelay('Você deseja remarcar ou cancelar seu agendamento? (Responda com "remarcar" ou "cancelar")', from);
-            } else if (userMessage === '4' || userMessage === 'redes sociais') {
-                userState[from].step = 'redesSociais'; // Passa para o próximo passo de redes sociais
-                sendMessageWithDelay('Confira nosso Instagram: https://www.instagram.com/paulatrancasealongamentos.\n\nSe precisar de mais informações, é só nos chamar!', from);
-            } else if (userMessage === '5' || userMessage === 'trabalhe conosco') {
-                userState[from].step = 'trabalheConosco'; // Passa para o próximo passo de trabalhar conosco
-                sendMessageWithDelay('Agradecemos o desejo de trabalhar conosco! Por favor, envie fotos do seu trabalho para avaliação.\n\nEstamos ansiosas para conhecer seu talento!', from);
+        case 'agendar1':
+            if (text === 'sim') {
+                state.step = 'agendar2';
+                sendMessage(from, '🔤 Qual o nome do penteado que você escolheu?');
+            } else if (text === 'não') {
+                state.step = 'catalogo';
+                sendMessage(from, 'Sem problemas! Veja nosso catálogo:\nhttps://www.whatsapp.com/catalog/5511952801212/?app_absent=0');
             } else {
-                sendMessageWithDelay('Desculpe, não entendi sua mensagem. Por favor, escolha uma das opções abaixo para continuar:\n\n1. Agendar horário\n2. Dúvidas\n3. Remarcar/Cancelar\n4. Redes sociais\n5. Trabalhe conosco', from);
+                sendMessage(from, 'Responda com "sim" ou "não" para continuarmos.');
             }
             break;
 
-        case 'agendar':
-            if (userMessage === 'sim') {
-                userState[from].step = 'nomePenteado'; // Passa para o próximo passo de nome do penteado
-                sendMessageWithDelay('Perfeito! Qual nome do penteado você escolheu?', from);
-            } else if (userMessage === 'não') {
-                userState[from].step = 'catalogo'; // Passa para o próximo passo de catálogo
-                sendMessageWithDelay('Sem problemas! Acesse o nosso catálogo e escolha o penteado desejado. Se precisar de ajuda, é só falar!\n\nLink do catálogo: https://www.whatsapp.com/catalog/5511952801212/?app_absent=0', from);
+        case 'agendar2':
+            state.step = 'agendar3';
+            sendMessage(from, `Penteado escolhido: *${message.body}*.\n📅 Qual dia e horário deseja agendar?`);
+            break;
+
+        case 'agendar3':
+            state.step = 'menuPrincipal';
+            sendMessage(from, `✅ Agenda registrada para: *${message.body}*.\nEntraremos em contato para confirmar. 🗓️`);
+            showMainMenu(from);
+            break;
+
+        case 'remarcarOuCancelar':
+            if (text === 'remarcar') {
+                state.step = 'remarcarData';
+                sendMessage(from, '📆 Informe a data atual do agendamento e a nova data desejada.');
+            } else if (text === 'cancelar') {
+                state.step = 'cancelar';
+                sendMessage(from, '❌ Seu agendamento será cancelado. Confirma? (sim/não)');
             } else {
-                sendMessageWithDelay('Desculpe, não entendi. Responda com "sim" ou "não" sobre o penteado que deseja.', from);
+                sendMessage(from, 'Responda com *remarcar* ou *cancelar* para continuarmos.');
             }
             break;
 
-        case 'nomePenteado':
-            // Aqui o usuário escolhe o nome do penteado
-            userState[from].step = 'ajudaMais'; // Passa para a etapa de "ajuda em algo mais"
-            sendMessageWithDelay('Penteado escolhido com sucesso! Posso te ajudar em algo mais?', from);
+        case 'remarcarData':
+            state.step = 'menuPrincipal';
+            sendMessage(from, '✅ Solicitação recebida. Entraremos em contato para confirmar a nova data.');
+            showMainMenu(from);
             break;
 
-        case 'ajudaMais':
-            if (userMessage === 'sim') {
-                sendMessageWithDelay('Ótimo! Como posso te ajudar? Escolha uma das opções abaixo:\n\n1. Agendar horário\n2. Dúvidas\n3. Remarcar/Cancelar\n4. Redes sociais\n5. Trabalhe conosco', from);
-                userState[from].step = 'saudacao'; // Volta ao menu principal
+        case 'cancelar':
+            if (text === 'sim') {
+                state.step = 'menuPrincipal';
+                sendMessage(from, '✅ Agendamento cancelado com sucesso. Esperamos te ver em breve!');
+                showMainMenu(from);
             } else {
-                sendMessageWithDelay('Que bom ter ajudado! Se precisar de algo mais, é só chamar. Até logo!', from);
-                userState[from].step = 'start'; // Retorna ao início
+                state.step = 'menuPrincipal';
+                sendMessage(from, 'Cancelamento abortado.');
+                showMainMenu(from);
             }
             break;
 
+        case 'catalogo':
         case 'duvidas':
-            sendMessageWithDelay('Agradecemos por entrar em contato! Responderemos sua dúvida assim que possível. Se precisar de mais informações, é só falar!', from);
-            userState[from].step = 'ajudaMais'; // Após a dúvida, pergunta se pode ajudar em algo mais
-            break;
-
-        case 'remarcarCancelar':
-            if (userMessage === 'remarcar') {
-                userState[from].step = 'remarcarData'; // Passa para o passo de remarcar data
-                sendMessageWithDelay('Por favor, informe a data que está agendada e a nova data que você deseja.', from);
-            } else if (userMessage === 'cancelar') {
-                userState[from].step = 'cancelarConfirmacao'; // Passa para o passo de confirmação de cancelamento
-                sendMessageWithDelay('Lamentamos que precise cancelar. Podemos te ajudar de alguma forma?', from);
-            } else {
-                sendMessageWithDelay('Desculpe, não entendi. Responda com "remarcar" ou "cancelar".', from);
-            }
-            break;
-
-        case 'redesSociais':
-            sendMessageWithDelay('Confira nosso Instagram: https://www.instagram.com/paulatrancasealongamentos.\n\nSe precisar de mais informações, é só nos chamar!', from);
-            userState[from].step = 'ajudaMais'; // Após dar as redes sociais, pergunta se precisa de ajuda
-            break;
-
-        case 'trabalheConosco':
-            sendMessageWithDelay('Agradecemos o desejo de trabalhar conosco! Por favor, envie fotos do seu trabalho para avaliação.\n\nEstamos ansiosas para conhecer seu talento!', from);
-            userState[from].step = 'ajudaMais'; // Após enviar instruções para trabalhar conosco, pergunta se precisa de ajuda
+        case 'redes':
+        case 'trabalhe':
+            state.step = 'menuPrincipal';
+            showMainMenu(from);
             break;
 
         default:
-            userState[from].step = 'start';
-            sendMessageWithDelay('Desculpe, não entendi sua mensagem. Por favor, escolha uma das opções abaixo para continuar:\n\n1. Agendar horário\n2. Dúvidas\n3. Remarcar/Cancelar\n4. Redes sociais\n5. Trabalhe conosco', from);
+            state.step = 'menuPrincipal';
+            showMainMenu(from);
             break;
     }
 });
 
-// Evento de erro
-client.on('error', error => {
-    console.log('Erro no cliente:', error);
+client.on('error', err => {
+    console.error('❌ Erro:', err);
 });
 
-// Inicializar o cliente do WhatsApp
 client.initialize();
